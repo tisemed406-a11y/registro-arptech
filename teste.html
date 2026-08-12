@@ -1772,7 +1772,7 @@ function loadDashboard(){
     var total = Math.ceil(lista.length / PER_PAGE);
     if(DASH_PAGE>=total) DASH_PAGE=Math.max(0,total-1);
     var slice = lista.slice(DASH_PAGE*PER_PAGE,(DASH_PAGE+1)*PER_PAGE);
-    document.getElementById('dashList').innerHTML = slice.map(function(o){ return osCard(o,''); }).join('') || '<div style="padding:20px;color:#999;">Nenhuma OS.</div>';
+    document.getElementById('dashList').innerHTML = slice.map(function(o){ return osCard(o,''); }).join('') || estadoVazio('📊', 'Nada por aqui ainda', 'As ordens de serviço em andamento aparecem neste painel.');
     document.getElementById('dashPag').innerHTML = pagButtons(total, DASH_PAGE, 'gotoDash');
     return;
   }
@@ -1788,6 +1788,15 @@ function loadDashboard(){
   var slice = lista.slice(DASH_PAGE*PER_PAGE,(DASH_PAGE+1)*PER_PAGE);
   document.getElementById('dashList').innerHTML = slice.map(recordCard).join('') || '<div style="padding:20px;color:#999;">Nenhum registro.</div>';
   document.getElementById('dashPag').innerHTML = pagButtons(total, DASH_PAGE, 'gotoDash');
+}
+
+// ===== Helper para estados vazios padronizados =====
+function estadoVazio(icone, titulo, subtitulo){
+  return '<div style="padding:40px 20px;text-align:center;color:#8a97a1;">'+
+    '<div style="font-size:38px;margin-bottom:10px;">'+icone+'</div>'+
+    '<div style="font-size:15px;font-weight:600;color:#5a6a75;margin-bottom:4px;">'+titulo+'</div>'+
+    (subtitulo ? '<div style="font-size:13px;">'+subtitulo+'</div>' : '')+
+    '</div>';
 }
 
 function renderListTab(){
@@ -1953,7 +1962,7 @@ function abrirOS(){
     dataCriacao:new Date().toLocaleDateString('pt-BR'), tecnico: tecnico };
   osOrdens.push(os);
   LS('hml_arp_os', JSON.stringify(osOrdens));
-  uiAlert('OS '+os.id+' aberta com sucesso!');
+  mostrarNotificacao('OS '+os.id+' aberta com sucesso.');
   ['osCliente','osDoc','osTelefone','osEmail','osDesc','osValor','osServicoOutro'].forEach(function(id){ document.getElementById(id).value=''; });
   setOsTipo('interno');
 }
@@ -2205,7 +2214,7 @@ function addMaterialOS(id){
     o.materiais.push({nome:res.nome, valor:n});
     LS('hml_arp_os', JSON.stringify(osOrdens));
     renderOS('aberta'); renderOS('andamento'); renderOS('concluida');
-    uiAlert('Material adicionado!');
+    mostrarNotificacao('Material adicionado.');
   });
 }
 
@@ -2310,7 +2319,11 @@ function renderOS(tipo){
   if(page>=total) page=Math.max(0,total-1);
   if(tipo==='aberta') OSA_PAGE=page; else if(tipo==='andamento') OSAND_PAGE=page; else OSC_PAGE=page;
   var slice = lista.slice(page*PER_PAGE,(page+1)*PER_PAGE);
-  document.getElementById(contentId).innerHTML = slice.map(function(o){ return osCard(o, acoesFn(o)); }).join('') || '<div style="padding:20px;color:#999;">Nenhuma OS.</div>';
+  var vazioOS;
+  if(tipo==='aberta'){ vazioOS = estadoVazio('📥', 'Nenhuma OS aberta', 'As novas ordens de serviço aparecem aqui.'); }
+  else if(tipo==='andamento'){ vazioOS = estadoVazio('🔧', 'Nenhuma OS em andamento', 'As ordens que você iniciar aparecem aqui.'); }
+  else { vazioOS = estadoVazio('✅', 'Nenhuma OS concluída', 'As ordens finalizadas ficam registradas aqui.'); }
+  document.getElementById(contentId).innerHTML = slice.map(function(o){ return osCard(o, acoesFn(o)); }).join('') || vazioOS;
   document.getElementById(pagId).innerHTML = pagButtons(total, page, fnName);
 }
 
@@ -2400,7 +2413,7 @@ function emitirNF(){
   notas.push(nf);
   saveNotas();
   renderNotas();
-  uiAlert('Nota n\u00ba '+nf.numero+' emitida!');
+  mostrarNotificacao('Nota nº '+nf.numero+' emitida.');
 }
 
 function renderNotas(){
@@ -2432,7 +2445,7 @@ function renderNotas(){
       '</div>'+
       '</div><div class="record-meta"><div style="font-weight:600">'+n.dataEmissao+'</div><div>'+n.horaEmissao+'</div></div></div>';
   }).join('');
-  document.getElementById('nfLista').innerHTML = html || '<div style="padding:20px;color:#999;">Nenhuma nota emitida.</div>';
+  document.getElementById('nfLista').innerHTML = html || estadoVazio('🧾', 'Nenhuma nota emitida', 'As notas fiscais emitidas aparecem aqui.');
   document.getElementById('nfPag').innerHTML = pagButtons(total, NF_PAGE, 'gotoNf');
 }
 
@@ -2461,7 +2474,7 @@ function editarNF(num){
     n.total = nv + (n.valorMateriais||0);
     saveNotas();
     renderNotas();
-    uiAlert('Nota nº '+n.numero+' atualizada!');
+    mostrarNotificacao('Nota nº '+n.numero+' atualizada.');
   });
 }
 
@@ -2760,7 +2773,7 @@ function renderComissoes(){
       '<div class="com-value">R$ '+com.toFixed(2)+'</div>'+
       '<div class="com-sub">Faturado: R$ '+me.total.toFixed(2)+' &middot; '+me.qtd+' OS &middot; Taxa '+COMISSAO_PERCENT+'%</div></div>';
   }
-  document.getElementById('comissaoContent').innerHTML = html || '<div style="padding:20px;color:#999;">Nenhuma OS concluída ainda.</div>';
+  document.getElementById('comissaoContent').innerHTML = html || estadoVazio('💰', 'Nenhuma OS concluída ainda', 'As comissões aparecem quando houver OS concluídas.');
 
   // Fechamentos mensais
   var listaEl = document.getElementById('comFechamentosLista');
@@ -3020,7 +3033,7 @@ function renderLocais(){
       '<div><span class="badge '+ti.cls+'">'+ti.label+'</span></div>'+
       '</div><button class="btn-danger" onclick="excluirLocal('+x.i+')">Excluir</button></div>';
   }).join('');
-  document.getElementById('locaisLista').innerHTML = html || '<div style="padding:20px;color:#999;">Nenhum local cadastrado.</div>';
+  document.getElementById('locaisLista').innerHTML = html || estadoVazio('📍', 'Nenhum local cadastrado', 'Adicione escolas e setores para usar no registro.');
   document.getElementById('locaisPag').innerHTML = pagButtons(total, LOCAIS_PAGE, 'gotoLocais');
 }
 
@@ -3055,7 +3068,7 @@ function renderServicos(){
       '<div class="record-name">'+s.nome+'</div><div>'+b+'</div>'+
       '</div><button class="btn-danger" onclick="excluirServico('+i+')">Excluir</button></div>';
   }).join('');
-  document.getElementById('servicosLista').innerHTML = html || '<div style="padding:20px;color:#999;">Nenhum servi\u00e7o cadastrado.</div>';
+  document.getElementById('servicosLista').innerHTML = html || estadoVazio('🛠️', 'Nenhum serviço cadastrado', 'Cadastre os tipos de serviço oferecidos.');
 }
 
 function salvarCores(){
