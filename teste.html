@@ -1799,7 +1799,20 @@ function renderListTab(){
   var total = Math.ceil(lista.length / PER_PAGE);
   if(LIST_PAGE>=total) LIST_PAGE=Math.max(0,total-1);
   var slice = lista.slice(LIST_PAGE*PER_PAGE,(LIST_PAGE+1)*PER_PAGE);
-  document.getElementById('listContent').innerHTML = slice.map(recordCard).join('') || '<div style="padding:20px;color:#999;">Nenhum registro.</div>';
+  var vazio;
+  if(records.length===0){
+    vazio = '<div style="padding:40px 20px;text-align:center;color:#8a97a1;">'+
+      '<div style="font-size:38px;margin-bottom:10px;">📋</div>'+
+      '<div style="font-size:15px;font-weight:600;color:#5a6a75;margin-bottom:4px;">Nenhum atendimento registrado ainda</div>'+
+      '<div style="font-size:13px;">Use a aba <b>Novo Registro</b> para lançar o primeiro atendimento.</div>'+
+      '</div>';
+  } else {
+    vazio = '<div style="padding:36px 20px;text-align:center;color:#8a97a1;">'+
+      '<div style="font-size:34px;margin-bottom:8px;">🔍</div>'+
+      '<div style="font-size:14px;">Nenhum registro corresponde à busca.</div>'+
+      '</div>';
+  }
+  document.getElementById('listContent').innerHTML = slice.map(recordCard).join('') || vazio;
   document.getElementById('listPag').innerHTML = pagButtons(total, LIST_PAGE, 'gotoList');
 }
 
@@ -1807,20 +1820,47 @@ function salvarRegistro(){
   var resp;
   if(currentUser.profile==='ADMIN'){
     resp = document.getElementById('newRegRespSel').value;
-    if(!resp){ uiAlert('Selecione o respons\u00e1vel!'); return; }
+    if(!resp){ mostrarNotificacao('Selecione o responsável pelo atendimento.', 'erro'); return; }
   } else { resp = currentUser.name; }
+
   var locIdx = document.getElementById('newRegLocal').value;
-  if(locIdx==='' && document.getElementById('newRegLocalBusca').value.trim()){
-    uiAlert('Selecione um local da lista de sugestões!'); return;
+  var buscaLocal = document.getElementById('newRegLocalBusca').value.trim();
+  if(locIdx==='' && buscaLocal){
+    mostrarNotificacao('Selecione um local da lista de sugestões.', 'erro');
+    document.getElementById('newRegLocalBusca').focus();
+    return;
   }
+  if(locIdx==='' || locIdx===null){
+    mostrarNotificacao('Informe a escola ou setor do atendimento.', 'erro');
+    document.getElementById('newRegLocalBusca').focus();
+    return;
+  }
+
   var type = document.getElementById('newRegType').value;
   var desc = document.getElementById('newRegDesc').value.trim();
+  if(!desc){
+    mostrarNotificacao('Descreva a atividade realizada.', 'erro');
+    document.getElementById('newRegDesc').focus();
+    return;
+  }
+
+  // Data e hora: se vazias, preenche com o momento atual (facilita para o técnico)
   var dataV = document.getElementById('newRegData').value;
   var horaV = document.getElementById('newRegHora').value;
-  if(locIdx==='' || locIdx===null || !desc || !dataV || !horaV){ uiAlert('Preencha local, data, hor\u00e1rio e descri\u00e7\u00e3o!'); return; }
+  var agora = new Date();
+  if(!dataV){
+    dataV = agora.toISOString().slice(0,10);
+    document.getElementById('newRegData').value = dataV;
+  }
+  if(!horaV){
+    horaV = ('0'+agora.getHours()).slice(-2)+':'+('0'+agora.getMinutes()).slice(-2);
+    document.getElementById('newRegHora').value = horaV;
+  }
+
   var loc = locais[parseInt(locIdx)];
   if(!type){ type = loc.tipo; }
   var pd = dataV.split('-');
+
   if(EDIT_REG_ID){
     for(var k=0;k<records.length;k++){
       if(records[k].id===EDIT_REG_ID){
@@ -1831,20 +1871,23 @@ function salvarRegistro(){
     }
     EDIT_REG_ID=null;
     LS('hml_arp_rec', JSON.stringify(records));
-    uiAlert('Registro atualizado!');
+    mostrarNotificacao('Registro atualizado com sucesso.');
   } else {
     records.push({ id:Date.now(), resp:resp, local:loc.nome, locType:type, desc:desc,
       date: pd[2]+'/'+pd[1]+'/'+pd[0], start: horaV,
-    status: (document.getElementById('newRegStatus')||{value:'Concluido'}).value
-  });
+      status: (document.getElementById('newRegStatus')||{value:'Concluido'}).value
+    });
     LS('hml_arp_rec', JSON.stringify(records));
-    uiAlert('Registro salvo!');
+    mostrarNotificacao('Atendimento registrado com sucesso.');
   }
+  // Limpar o formulário para o próximo registro
   document.getElementById('newRegLocalBusca').value='';
+  document.getElementById('newRegLocal').value='';
   fillLocais();
   document.getElementById('newRegDesc').value='';
   document.getElementById('newRegType').selectedIndex=0;
   loadDashboard();
+  renderListTab();
 }
 
 document.addEventListener('change', function(e){
@@ -3348,20 +3391,23 @@ function uiPrompt(campos, opts){
   });
 }
 
-function mostrarNotificacao(msg){
+function mostrarNotificacao(msg, tipo){
   var el = document.getElementById('waNotif');
   if(!el){
     el = document.createElement('div');
     el.id='waNotif';
-    el.style.cssText='position:fixed;top:70px;right:16px;z-index:9999;background:#016535;color:#fff;'+
-      'padding:14px 18px;border-radius:12px;font-size:13px;font-weight:600;max-width:300px;'+
-      'box-shadow:0 6px 20px rgba(0,0,0,0.3);line-height:1.5;white-space:pre-line;cursor:pointer;';
     el.onclick=function(){ el.remove(); };
     document.body.appendChild(el);
   }
-  el.textContent=msg;
+  var cor = tipo==='erro' ? '#c0392b' : (tipo==='info' ? '#1a5276' : '#016535');
+  var icone = tipo==='erro' ? '⚠️' : (tipo==='info' ? 'ℹ️' : '✓');
+  el.style.cssText='position:fixed;top:70px;right:16px;z-index:9999;background:'+cor+';color:#fff;'+
+    'padding:14px 18px;border-radius:12px;font-size:13px;font-weight:600;max-width:320px;'+
+    'box-shadow:0 6px 20px rgba(0,0,0,0.3);line-height:1.5;white-space:pre-line;cursor:pointer;'+
+    'display:flex;align-items:center;gap:9px;animation:notifIn .25s ease;';
+  el.innerHTML='<span style="font-size:17px;flex-shrink:0;">'+icone+'</span><span>'+msg+'</span>';
   clearTimeout(el._t);
-  el._t=setTimeout(function(){ if(el.parentNode) el.remove(); }, 8000);
+  el._t=setTimeout(function(){ if(el.parentNode) el.remove(); }, tipo==='erro'?6000:4000);
 }
 
 // Poll automático a cada 15 segundos
@@ -3717,12 +3763,14 @@ function filtrarRelatorio(){
 
 function exportarRelatorio(tipo){
   var lista = filtrarRelatorio();
-  if(!lista.length){ uiAlert('Nenhum registro encontrado para o per\u00edodo selecionado.'); return; }
+  if(!lista.length){ mostrarNotificacao('Nenhum registro encontrado para o período selecionado.', 'erro'); return; }
 
   if(tipo==='pdf'){
-    gerarRelatorioPDF(lista);
+    mostrarNotificacao('Gerando PDF...', 'info');
+    setTimeout(function(){ gerarRelatorioPDF(lista); }, 50);
   } else {
-    gerarRelatorioDocx(lista);
+    mostrarNotificacao('Gerando documento Word...', 'info');
+    setTimeout(function(){ gerarRelatorioDocx(lista); }, 50);
   }
 }
 
@@ -4526,6 +4574,7 @@ try{ restaurarSessao(); }catch(e){}
 .ui-dlg-btn.cancel{background:#e6e9ec;color:#444;}
 @keyframes uiFade{from{opacity:0}to{opacity:1}}
 @keyframes uiPop{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes notifIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
 @media (max-width:680px){.ui-dialog{max-width:100%;border-radius:14px;}.ui-dialog-footer{flex-direction:column-reverse;}.ui-dlg-btn{width:100%;}}
 </style>
 
