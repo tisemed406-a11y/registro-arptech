@@ -740,6 +740,13 @@ table.users td { padding:10px 8px; border-bottom:1px solid #e7eeec; }
           <div class="form-group"><label class="form-label">CPF/CNPJ (opcional)</label><input type="text" id="osDoc" class="form-input" placeholder="000.000.000-00 ou 00.000.000/0000-00"></div>
           <div class="form-group"><label class="form-label">Telefone</label><input type="tel" id="osTelefone" class="form-input"></div>
           <div class="form-group"><label class="form-label">E-mail (opcional)</label><input type="email" id="osEmail" class="form-input"></div>
+          <div class="form-group"><label class="form-label">Prioridade</label>
+            <select id="osPrioridade" class="form-input">
+              <option value="Normal">🟢 Normal</option>
+              <option value="Alta">🟡 Alta</option>
+              <option value="Urgente">🔴 Urgente</option>
+            </select>
+          </div>
           <div class="form-group"><label class="form-label">Descri&ccedil;&atilde;o do problema</label><textarea id="osDesc" class="form-input" style="min-height:100px;resize:vertical;"></textarea></div>
           <div class="form-group"><label class="form-label">Valor do servi&ccedil;o (R$)</label><input type="number" id="osValor" class="form-input" step="0.01" min="0" placeholder="0,00"></div>
           <button class="btn-primary" onclick="abrirOS()">Abrir OS</button>
@@ -1955,15 +1962,17 @@ function abrirOS(){
   var email = document.getElementById('osEmail').value.trim();
   var desc = document.getElementById('osDesc').value.trim();
   var valor = parseFloat(document.getElementById('osValor').value||'0');
+  var prioridade = (document.getElementById('osPrioridade')||{value:'Normal'}).value;
   if(!cliente || !tel || !desc){ uiAlert('Preencha cliente, telefone e descri\u00e7\u00e3o!'); return; }
   var os = { id:'OS-'+Date.now(), cliente:cliente, doc:doc, telefone:tel, email:email, desc:desc,
-    servico:servico, tipo:OS_TIPO, materiais:[],
+    servico:servico, tipo:OS_TIPO, materiais:[], prioridade:prioridade,
     valor: isNaN(valor)?0:valor, status:'Em Aberto',
     dataCriacao:new Date().toLocaleDateString('pt-BR'), tecnico: tecnico };
   osOrdens.push(os);
   LS('hml_arp_os', JSON.stringify(osOrdens));
   mostrarNotificacao('OS '+os.id+' aberta com sucesso.');
   ['osCliente','osDoc','osTelefone','osEmail','osDesc','osValor','osServicoOutro'].forEach(function(id){ document.getElementById(id).value=''; });
+  if(document.getElementById('osPrioridade')) document.getElementById('osPrioridade').value='Normal';
   setOsTipo('interno');
 }
 
@@ -2250,6 +2259,14 @@ function excluirOS(id){
   });
 }
 
+function _badgePrioridade(p){
+  if(!p || p==='Normal') return ''; // Normal não polui o card
+  var cfg = p==='Urgente'
+    ? {bg:'#dc2626', ico:'🔴', txt:'Urgente'}
+    : {bg:'#d97706', ico:'🟡', txt:'Alta'};
+  return '<span style="background:'+cfg.bg+';color:#fff;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;margin-left:6px;">'+cfg.ico+' '+cfg.txt+'</span>';
+}
+
 function osCard(o, acoes){
   var stCls = o.status==='Conclu\u00edda' ? 'badge-status-concluida' : (o.status==='Em Atendimento' ? 'badge-status-andamento' : 'badge-status-aberta');
   var matHtml = '';
@@ -2257,7 +2274,9 @@ function osCard(o, acoes){
     matHtml = '<div style="font-size:11px;color:#555;margin-top:6px;">Materiais: '+o.materiais.map(function(m){ return m.nome+' (R$ '+m.valor.toFixed(2)+')'; }).join(', ')+'</div>';
   }
   var tipoBadge = o.tipo ? '<span class="badge '+(o.tipo==='externo'?'badge-ext':'badge-int')+'">'+(o.tipo==='externo'?'Externo':'Interno')+'</span>' : '';
-  return '<div class="record-item"><div class="record-left">'+
+  var bordaPrio = o.prioridade==='Urgente' ? 'border-left:4px solid #dc2626;'
+                : (o.prioridade==='Alta' ? 'border-left:4px solid #d97706;' : '');
+  return '<div class="record-item" style="'+bordaPrio+'"><div class="record-left">'+
     '<div class="record-name">'+o.id+' &middot; '+o.cliente+'</div>'+
     (o.servico?'<div style="font-size:11px;color:var(--cor-acento);font-weight:700;margin-top:2px;">'+o.servico+'</div>':'')+
     '<div class="record-desc">'+o.desc+'</div>'+
@@ -2269,7 +2288,7 @@ function osCard(o, acoes){
     })() : '')+
     matHtml+
     (o.obs?'<div style="font-size:11px;color:#555;margin-top:6px;"><b>Obs:</b> '+o.obs+'</div>':'')+
-    '<div><span class="badge '+stCls+'">'+o.status+'</span>'+tipoBadge+
+    '<div><span class="badge '+stCls+'">'+o.status+'</span>'+_badgePrioridade(o.prioridade)+tipoBadge+
     (o.origem==='Site / Portal Externo' ? '<span style="background:#0ea5e9;color:#fff;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;margin-left:6px;">Portal Web</span>' : '')+
     (o.origem==='whatsapp' ? '<span style="background:#25D366;color:#fff;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:700;margin-left:6px;">WhatsApp</span>' : '')+
     '</div>'+
@@ -2298,6 +2317,17 @@ function renderOS(tipo){
     var own = isAdmin || isArptech || o.tecnico===currentUser.name;
     return st && own;
   }).reverse();
+
+  // Ordena por prioridade: Urgente > Alta > Normal (mantém recência dentro de cada nível).
+  // Só aplica em Abertas e Em Andamento — concluídas ficam por data.
+  if(tipo !== 'concluida'){
+    var peso = {'Urgente':0, 'Alta':1, 'Normal':2};
+    lista.sort(function(a,b){
+      var pa = peso[a.prioridade] !== undefined ? peso[a.prioridade] : 2;
+      var pb = peso[b.prioridade] !== undefined ? peso[b.prioridade] : 2;
+      return pa - pb;
+    });
+  }
 
   var page, contentId, pagId, fnName, acoesFn;
   var btnExcluir = function(o){ return '<button class="btn-danger btn-small" onclick="excluirOS(\''+o.id+'\')">Excluir</button>'; };
